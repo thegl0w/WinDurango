@@ -4,6 +4,19 @@
 
 namespace winrt::Windows::Kinect::implementation
 {
+    bool IsKinectRuntimeAvailable()
+    {
+        static const bool available = [] {
+            // Kept loaded so the delay-load helper binds to this module.
+            HMODULE runtime = LoadLibraryExW(L"Kinect20.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+            if (runtime == nullptr)
+                p_wd->log.Warn("WinDurango::Kinect::Windows::Kinect::KinectSensor",
+                               "Kinect20.dll (Kinect for Windows Runtime 2.0) not found; reporting no Kinect sensor");
+            return runtime != nullptr;
+        }();
+        return available;
+    }
+
     Kinect::AudioSource AudioBeam::AudioSource()
     {
         return m_audioSource;
@@ -1093,30 +1106,37 @@ namespace winrt::Windows::Kinect::implementation
 
     void KinectSensor::Open()
     {
-        m_pKinectSensor->Open();
+        if (m_pKinectSensor)
+            m_pKinectSensor->Open();
     }
     
     void KinectSensor::Close()
     {
-        m_pKinectSensor->Close();
+        if (m_pKinectSensor)
+            m_pKinectSensor->Close();
     }
     
     bool KinectSensor::IsOpen()
     {
         BOOLEAN isOpen = 0;
-        m_pKinectSensor->get_IsOpen(&isOpen);
+        if (m_pKinectSensor)
+            m_pKinectSensor->get_IsOpen(&isOpen);
         return (bool)isOpen;
     }
     
     bool KinectSensor::IsAvailable()
     {
         BOOLEAN isAvailable = 0;
-        m_pKinectSensor->get_IsAvailable(&isAvailable);
+        if (m_pKinectSensor)
+            m_pKinectSensor->get_IsAvailable(&isAvailable);
         return (bool)isAvailable;
     }
     
     Kinect::ColorFrameSource KinectSensor::ColorFrameSource()
     {
+        if (!m_pKinectSensor)
+            return nullptr;
+
         ::IColorFrameSource *pColorFrameSource = nullptr;
 
         HRESULT hresult = m_pKinectSensor->get_ColorFrameSource(&pColorFrameSource);
@@ -1126,6 +1146,9 @@ namespace winrt::Windows::Kinect::implementation
     
     Kinect::DepthFrameSource KinectSensor::DepthFrameSource()
     {
+        if (!m_pKinectSensor)
+            return nullptr;
+
         ::IDepthFrameSource *pDepthFrameSource = nullptr;
 
         HRESULT hresult = m_pKinectSensor->get_DepthFrameSource(&pDepthFrameSource);
@@ -1137,6 +1160,9 @@ namespace winrt::Windows::Kinect::implementation
     
     Kinect::BodyFrameSource KinectSensor::BodyFrameSource()
     {
+        if (!m_pKinectSensor)
+            return nullptr;
+
         ::IBodyFrameSource *pBodyFrameSource = nullptr;
 
         HRESULT hresult = m_pKinectSensor->get_BodyFrameSource(&pBodyFrameSource);
@@ -1146,6 +1172,9 @@ namespace winrt::Windows::Kinect::implementation
 
     Kinect::BodyIndexFrameSource KinectSensor::BodyIndexFrameSource()
     { 
+        if (!m_pKinectSensor)
+            return nullptr;
+
         ::IBodyIndexFrameSource *pBodyIndexFrameSource = nullptr;
 
         HRESULT hresult = m_pKinectSensor->get_BodyIndexFrameSource(&pBodyIndexFrameSource);
@@ -1155,6 +1184,9 @@ namespace winrt::Windows::Kinect::implementation
     
     Kinect::InfraredFrameSource KinectSensor::InfraredFrameSource()
     {
+        if (!m_pKinectSensor)
+            return nullptr;
+
         ::IInfraredFrameSource *pInfraredFrameSource = nullptr;
 
         HRESULT hresult = m_pKinectSensor->get_InfraredFrameSource(&pInfraredFrameSource);
@@ -1185,6 +1217,9 @@ namespace winrt::Windows::Kinect::implementation
     
     Kinect::CoordinateMapper KinectSensor::CoordinateMapper()
     {
+        if (!m_pKinectSensor)
+            return nullptr;
+
         ::ICoordinateMapper *pCoordinateMapper = nullptr;
 
         HRESULT hresult = m_pKinectSensor->get_CoordinateMapper(&pCoordinateMapper);
@@ -1203,7 +1238,8 @@ namespace winrt::Windows::Kinect::implementation
     {
         DWORD kinectCapabilities = 0;
 
-        HRESULT hresult = m_pKinectSensor->get_KinectCapabilities(&kinectCapabilities);
+        if (m_pKinectSensor)
+            m_pKinectSensor->get_KinectCapabilities(&kinectCapabilities);
         
         return static_cast<Kinect::KinectCapabilities>(kinectCapabilities);
     }
