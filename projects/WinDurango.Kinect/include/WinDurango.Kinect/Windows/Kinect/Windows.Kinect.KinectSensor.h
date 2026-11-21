@@ -561,11 +561,17 @@ namespace winrt::Windows::Kinect::implementation
         ::IFrameDescription *m_pFrameDescription = nullptr;
     };
 
+    // Kinect20.dll (the Kinect for Windows Runtime 2.0) is delay-loaded. Without it the sensor is
+    // reported as not available, as a console with no Kinect attached does, instead of the class
+    // failing to activate.
+    bool IsKinectRuntimeAvailable();
+
     struct KinectSensor : KinectSensorT<KinectSensor>
     {
         KinectSensor()
         {
-            GetDefaultKinectSensor(&m_pKinectSensor);
+            if (IsKinectRuntimeAvailable())
+                GetDefaultKinectSensor(&m_pKinectSensor);
         }
 
         static winrt::Windows::Kinect::KinectSensor GetDefault();

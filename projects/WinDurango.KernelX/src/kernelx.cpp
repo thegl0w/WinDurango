@@ -5,6 +5,7 @@
 #include <winternl.h>
 #include "EraCoreApplication.h"
 #include <Psapi.h>
+#include <mutex>
 
 EXTERN_C CONSOLE_TYPE __stdcall GetConsoleType()
 {
@@ -730,8 +731,82 @@ EXTERN_C void __stdcall XMemReleaseAuxiliaryTitleMemory(_In_opt_ HANDLE hHandle)
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
 }
 
+// Minecraft: Xbox One Edition 1.61 reads DLC packs through a "TPACK:" root, a name kept from the
+// Xbox 360 content-mount API. It refers to the DLC pack being loaded: after listing and opening
+// Mount\DLC\<pack>\<file>.pck the title asks for TPACK: and TPACK:\<file>.pck. Left unmapped, the
+// path becomes Mount\TPACK:\..., Windows rejects it as an invalid name, and the title crashes while
+// freeing the half-loaded pack. Remember the last DLC pack folder the title touched and resolve
+// TPACK: against it.
+static std::mutex DlcPackRootLock;
+static std::wstring LastDlcPackRoot;
+
+static void RememberDlcPackRoot(std::wstring_view path)
+{
+    size_t start = 0;
+    while (start < path.size())
+    {
+        size_t end = path.find_first_of(L"\\/", start);
+        if (end == std::wstring_view::npos)
+            return;
+
+        std::wstring_view component = path.substr(start, end - start);
+        if (component.size() == 3 && _wcsnicmp(component.data(), L"DLC", 3) == 0)
+        {
+            size_t packEnd = path.find_first_of(L"\\/", end + 1);
+            std::wstring_view pack =
+                path.substr(end + 1, packEnd == std::wstring_view::npos ? std::wstring_view::npos : packEnd - end - 1);
+            // Skip a listing of the DLC folder itself (DLC\*) and empty components.
+            if (pack.empty() || pack.find_first_of(L"*?") != std::wstring_view::npos)
+                return;
+
+            std::wstring root(path.substr(0, packEnd == std::wstring_view::npos ? path.size() : packEnd));
+            std::replace(root.begin(), root.end(), L'/', L'\\');
+            std::lock_guard<std::mutex> guard(DlcPackRootLock);
+            LastDlcPackRoot = std::move(root);
+            return;
+        }
+        start = end + 1;
+    }
+}
+
+static bool MapTPackPath(LPCWSTR &lpFileName)
+{
+    if (_wcsnicmp(lpFileName, L"TPACK:", 6) != 0)
+        return false;
+
+    thread_local std::wstring mapped;
+    {
+        std::lock_guard<std::mutex> guard(DlcPackRootLock);
+        if (LastDlcPackRoot.empty())
+            return false;
+        mapped = LastDlcPackRoot;
+    }
+
+    std::wstring_view rest(lpFileName + 6);
+    if (!rest.empty() && rest[0] != L'\\' && rest[0] != L'/')
+        mapped.push_back(L'\\');
+    mapped.append(rest);
+    std::replace(mapped.begin(), mapped.end(), L'/', L'\\');
+
+    lpFileName = mapped.c_str();
+    return true;
+}
+
+static void FixRelativePathCore(LPCWSTR &lpFileName);
 
 void FixRelativePath(LPCWSTR &lpFileName)
+{
+    if (lpFileName == nullptr || lpFileName[0] == L'\0')
+        return;
+
+    if (MapTPackPath(lpFileName))
+        return;
+
+    FixRelativePathCore(lpFileName);
+    RememberDlcPackRoot(lpFileName);
+}
+
+static void FixRelativePathCore(LPCWSTR &lpFileName)
 {
     static std::wstring convert{};
     std::wstring_view fileName(lpFileName);
@@ -880,6 +955,9 @@ EXTERN_C HANDLE __stdcall EraCreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAcce
     {
         FixRelativePath(FileName);
     }
+
+    // Paths handled by the branches above bypass FixRelativePath, so record DLC pack folders here too.
+    RememberDlcPackRoot(FileName);
 
     HANDLE Result = TrueCreateFileW(FileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition,
                                     dwFlagsAndAttributes, hTemplateFile);

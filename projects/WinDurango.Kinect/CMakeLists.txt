@@ -82,7 +82,11 @@ target_link_directories(WinDurango.Kinect PRIVATE
     "${CMAKE_SOURCE_DIR}/build/vcpkg_installed/x64-windows/lib"
 )
 
-target_link_libraries(WinDurango.Kinect PRIVATE WinDurango.Common windowsapp runtimeobject unofficial::kinectsdk2::kinectsdk2)
+target_link_libraries(WinDurango.Kinect PRIVATE WinDurango.Common windowsapp runtimeobject unofficial::kinectsdk2::kinectsdk2 delayimp)
+
+# Kinect20.dll comes from the Kinect for Windows Runtime 2.0, which most PCs do not have. Delay-load
+# it so windows.kinect.dll still loads without it; KinectSensor then reports no sensor.
+target_link_options(WinDurango.Kinect PRIVATE "/DELAYLOAD:Kinect20.dll")
 
 target_compile_definitions(WinDurango.Kinect PUBLIC
     WINDURANGO_WINRT_COMPILER_NAME="${CMAKE_CXX_COMPILER_ID}"
