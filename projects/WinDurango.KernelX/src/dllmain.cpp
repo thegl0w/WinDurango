@@ -1,4 +1,5 @@
 #include "Hooks.h"
+#include "EraStaWait.h"
 #include "kernelx.h"
 #include "Logan.h"
 #include "ForzaThreadHook.h"
@@ -32,6 +33,9 @@ void KernelxInitialize(HINSTANCE hinstDLL)
         XWinePatchImport(GetModuleHandleW(nullptr), GetRuntimeModule(),
                          "?GetActivationFactoryByPCWSTR@@YAJPEAXAEAVGuid@Platform@@PEAPEAX@Z",
                          GetActivationFactoryRedirect);
+
+        // Keep the CoreApplication view thread servicing COM calls while the title blocks it.
+        EraInstallStaWaitPatch(GetModuleHandleW(nullptr));
 
         //This is needed for DXVK.
         if (!User32) User32 = LoadLibraryA("user32.dll");
